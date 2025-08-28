@@ -1,0 +1,46 @@
+# Claude
+CLAUDE.md
+# Environment variables
+.env
+.env.*
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Model cache (important for vast.ai to avoid re-downloading)
+model_cache/
+*.bin
+*.safetensors
+*.pt
+*.pth
+
+# Output files
+outputs/
+results/
+*.json
+*.txt
+*.log
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# MacOS
+.DS_Store
+
+# Vast.ai specific
+vast_instance_info.txt
+ssh_config.txt
