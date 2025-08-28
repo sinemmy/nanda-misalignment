@@ -254,6 +254,12 @@ class QwenMisalignmentRunner:
         
         with open(output_file, 'w') as f:
             json.dump(result.to_dict(), f, indent=2)
+        
+        # Also append to a cumulative file for safety
+        cumulative_file = Path(self.config.output_dir) / f"{result.scenario}_cumulative.jsonl"
+        with open(cumulative_file, 'a') as f:
+            json.dump(result.to_dict(), f)
+            f.write('\n')
     
     def _save_scenario_results(
         self,

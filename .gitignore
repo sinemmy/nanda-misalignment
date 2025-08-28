@@ -1,5 +1,3 @@
-# Claude
-CLAUDE.md
 # Environment variables
 .env
 .env.*
@@ -13,18 +11,24 @@ __pycache__/
 *.so
 .Python
 
-# Model cache (important for vast.ai to avoid re-downloading)
+# Model cache (important to avoid re-downloading ~30GB)
 model_cache/
 *.bin
 *.safetensors
 *.pt
 *.pth
 
-# Output files
+# Experiment outputs and results
 outputs/
 results/
-*.json
-*.txt
+vast_results_*/
+results_archive.tar.gz
+initial_results.tar.gz
+mech_interp_results.tar.gz
+misalignment_examples.tar.gz
+instance_info.txt
+
+# Logs
 *.log
 
 # Jupyter

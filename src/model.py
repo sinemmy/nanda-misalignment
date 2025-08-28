@@ -4,6 +4,7 @@ import torch
 import logging
 from typing import Tuple, Optional, Dict, Any
 from transformers import AutoModelForCausalLM, AutoTokenizer
+from bs4 import BeautifulSoup
 
 logger = logging.getLogger(__name__)
 
@@ -143,30 +144,61 @@ Based on my analysis, here is my response:
     
     def _parse_response(self, response: str) -> Tuple[str, str]:
         """Parse response to extract CoT reasoning and final answer."""
-        # Look for thinking tags
-        if "<thinking>" in response and "</thinking>" in response:
-            start = response.index("<thinking>") + len("<thinking>")
-            end = response.index("</thinking>")
-            cot_reasoning = response[start:end].strip()
+        # Try parsing with BeautifulSoup first for more robust handling
+        try:
+            soup = BeautifulSoup(response, "lxml")
             
-            # Final answer is everything after </thinking>
-            final_answer = response[end + len("</thinking>"):].strip()
+            # Look for thinking tags
+            thinking_tag = soup.find("thinking")
+            if thinking_tag:
+                cot_reasoning = thinking_tag.get_text().strip()
+                
+                # Remove the thinking tag from soup
+                thinking_tag.decompose()
+                
+                # Final answer is remaining text
+                final_answer = soup.get_text().strip()
+            else:
+                # Also check for answer tags (like Anthropic's classifiers)
+                answer_tag = soup.find("answer")
+                if answer_tag:
+                    final_answer = answer_tag.get_text().strip()
+                    # Everything before answer tag is reasoning
+                    answer_tag.decompose()
+                    cot_reasoning = soup.get_text().strip()
+                else:
+                    # No structured tags found
+                    cot_reasoning = response
+                    final_answer = response
+                    
+        except Exception as e:
+            logger.debug(f"BeautifulSoup parsing failed, falling back to string parsing: {e}")
             
-            # Clean up common prefixes
-            prefixes = [
-                "Based on my analysis, here is my response:",
-                "Based on my analysis,",
-                "My response:",
-                "Here is my response:",
-            ]
-            for prefix in prefixes:
-                if final_answer.startswith(prefix):
-                    final_answer = final_answer[len(prefix):].strip()
-                    break
-        else:
-            # Fallback: treat entire response as both CoT and answer
-            cot_reasoning = response
-            final_answer = response
+            # Fallback to simple string parsing
+            if "<thinking>" in response and "</thinking>" in response:
+                start = response.index("<thinking>") + len("<thinking>")
+                end = response.index("</thinking>")
+                cot_reasoning = response[start:end].strip()
+                
+                # Final answer is everything after </thinking>
+                final_answer = response[end + len("</thinking>"):].strip()
+            else:
+                # No tags found at all
+                cot_reasoning = response
+                final_answer = response
+        
+        # Clean up common prefixes from final answer
+        prefixes = [
+            "Based on my analysis, here is my response:",
+            "Based on my analysis,",
+            "My response:",
+            "Here is my response:",
+            "Here's my response:",
+        ]
+        for prefix in prefixes:
+            if final_answer.startswith(prefix):
+                final_answer = final_answer[len(prefix):].strip()
+                break
         
         return cot_reasoning, final_answer
     
