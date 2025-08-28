@@ -158,8 +158,8 @@ def monitor_and_terminate(ip_address, port, max_runtime_hours=4, check_interval_
 def main():
     """Main entry point."""
     if len(sys.argv) < 3:
-        print("Usage: python vast_auto_terminate.py <IP> <PORT> [MAX_HOURS]")
-        print("Example: python vast_auto_terminate.py 123.45.67.89 12345 4")
+        print("Usage: python start_monitor_and_auto_terminate.py <IP> <PORT> [MAX_HOURS]")
+        print("Example: python start_monitor_and_auto_terminate.py 123.45.67.89 12345 4")
         sys.exit(1)
     
     ip = sys.argv[1]

@@ -22,30 +22,18 @@ ssh root@123.45.67.89 -p 12345
 
 ## Step 3: Deploy Your Code
 
-### Option A: Via GitHub (Recommended)
-1. Push your code to GitHub:
+### Recommended: Use Automated Scripts
+The easiest way is to use our automated scripts from your local machine:
+
 ```bash
-git add .
-git commit -m "Ready for vast.ai deployment"
-git push origin main
+# Configure .env with your GitHub repo
+echo "GITHUB_REPO=https://github.com/YOUR_USERNAME/nanda-misalignment.git" > .env
+
+# Run complete workflow (deploys, runs, downloads, terminates)
+./deploy/deploy_run_terminate.sh initial 123.45.67.89 12345
 ```
 
-2. Update `vast_ai_setup.sh` line 34 with your repo:
-```bash
-git clone https://github.com/YOUR_USERNAME/nanda-misalignment.git
-```
-
-3. SSH into vast.ai instance:
-```bash
-ssh root@123.45.67.89 -p 12345
-```
-
-4. Download and run setup script:
-```bash
-cd /workspace
-wget https://raw.githubusercontent.com/YOUR_USERNAME/nanda-misalignment/main/vast_ai_setup.sh
-bash vast_ai_setup.sh
-```
+This handles everything automatically!
 
 ### Option B: Direct Upload (No GitHub)
 1. On your local machine, create archive:
@@ -69,7 +57,7 @@ ssh root@123.45.67.89 -p 12345
 cd /workspace
 tar -xzf nanda-misalignment.tar.gz
 cd nanda-misalignment
-bash vast_ai_setup.sh
+# Now use deploy_run_terminate.sh from your local machine instead
 ```
 
 ### Option C: Direct Copy (Simple but Slower)
@@ -92,7 +80,7 @@ scp -P 12345 .env root@123.45.67.89:/workspace/nanda-misalignment/
 ## Step 5: Run Setup
 ```bash
 cd /workspace/nanda-misalignment
-bash vast_ai_setup.sh
+# Now use deploy_run_terminate.sh from your local machine instead
 ```
 
 ## Step 6: Test & Run Experiments

@@ -184,7 +184,7 @@ def main():
     output_dir = Path(args.dir)
     if not output_dir.exists():
         print(f"❌ Directory not found: {output_dir}")
-        print("Run sync_results.sh first to download results from vast.ai")
+        print("Run deploy/deploy_run_terminate.sh to get results from vast.ai")
         return
     
     # Load and analyze results

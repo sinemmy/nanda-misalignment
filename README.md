@@ -51,8 +51,8 @@ vastai set api-key YOUR_VAST_API_KEY  # Get from vast.ai account
 
 # 2. Rent GPU instance on vast.ai (RTX 4090+)
 
-# 3. Run fully automated workflow
-./deploy/secure_deploy.sh initial [IP] [PORT]  # Quick test
+# 3. Run complete experiment workflow
+./deploy/deploy_run_terminate.sh initial [IP] [PORT]  # Quick test
 # Script automatically:
 # - Deploys code securely
 # - Runs experiments
@@ -60,8 +60,8 @@ vastai set api-key YOUR_VAST_API_KEY  # Get from vast.ai account
 # - Cleans up sensitive files  
 # - Terminates instance (if vastai CLI configured)
 
-# 4. Alternative: Run auto-terminator in background
-python deploy/vast_auto_terminate.py [IP] [PORT] 4 &
+# 4. Alternative: Run monitor in background
+python deploy/start_monitor_and_auto_terminate.py [IP] [PORT] 4 &
 # Then run your experiments manually
 ```
 
@@ -77,8 +77,8 @@ nanda-misalignment/
 ├── main.py                  # CLI entry point
 ├── analyze_results.py       # Results analysis tool
 └── deploy/                  # Deployment scripts
-    ├── secure_deploy.sh     # All-in-one secure deployment
-    ├── vast_auto_terminate.py # Auto-termination monitor
+    ├── deploy_run_terminate.sh              # Complete automated workflow
+    ├── start_monitor_and_auto_terminate.py  # Background monitor for manual runs
     └── DEPLOY_TO_VAST.md    # Deployment guide
 ```
 
@@ -109,7 +109,7 @@ After experiments complete:
 
 ```bash
 # Download summary only (~5MB)
-./sync_results.sh --ip [IP] --port [PORT] --summary
+# Results are automatically downloaded by deploy_run_terminate.sh
 
 # Analyze locally
 python analyze_results.py --verbose --examples 10
@@ -122,8 +122,8 @@ python analyze_results.py --export analysis.json
 
 **Important**: vast.ai charges by the minute! Use these tools:
 
-1. **Fully automated**: `deploy/secure_deploy.sh` does everything including termination
-2. **Background monitor**: `deploy/vast_auto_terminate.py` watches and auto-terminates
+1. **Automated workflow**: `deploy/deploy_run_terminate.sh` does everything
+2. **Background monitor**: `deploy/start_monitor_and_auto_terminate.py` for manual runs
 3. **Typical costs**: 
    - Initial test: ~$0.25 (30 min @ $0.50/hr)
    - Full analysis: ~$0.75 (90 min @ $0.50/hr)
