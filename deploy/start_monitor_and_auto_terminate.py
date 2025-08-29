@@ -84,8 +84,9 @@ def monitor_and_terminate(ip_address, port, max_runtime_hours=4, check_interval_
         # Check if max runtime exceeded
         if runtime > max_runtime:
             print(f"\n⏰ Max runtime ({max_runtime_hours} hours) exceeded!")
-            print("Terminating instance...")
-            destroy_instance(instance_id)
+            print("⚠️ AUTO-TERMINATION DISABLED - Manual termination required")
+            # print("Terminating instance...")
+            # destroy_instance(instance_id)
             break
         
         # Check if it's time to check status
@@ -133,9 +134,10 @@ def monitor_and_terminate(ip_address, port, max_runtime_hours=4, check_interval_
                             print("Waiting 60 seconds for manual download...")
                             time.sleep(60)
                         
-                        print("\n🤖 AUTO-TERMINATING instance to prevent overcharging...")
-                        if destroy_instance(instance_id):
-                            print("💰 Instance terminated! No more charges.")
+                        print("\n⚠️ AUTO-TERMINATION DISABLED - Manual termination required")
+                        print("Instance still running for debugging")
+                        # if destroy_instance(instance_id):
+                        #     print("💰 Instance terminated! No more charges.")
                         break
                 
             except subprocess.TimeoutExpired:
