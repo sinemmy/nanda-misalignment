@@ -7,6 +7,13 @@
 pip install vastai
 vastai set api-key YOUR_API_KEY  # Get from https://vast.ai/account
 ```
+3. (Optional) Set up SSH key for secure connections:
+```bash
+# Generate key if you don't have one
+ssh-keygen -t rsa -b 4096 -f ~/.ssh/vast_key
+# Add the path to your .env file
+echo "SSH_KEY_PATH=~/.ssh/vast_key" >> .env
+```
 
 ## Quick Start - Complete CLI Workflow
 
@@ -36,11 +43,15 @@ vastai show instances
 # One-time setup
 cp .env.example .env
 
-# Edit .env and set your GitHub repo
-echo "GITHUB_REPO=https://github.com/YOUR_USERNAME/nanda-misalignment.git" > .env
+# Edit .env and set your GitHub repo and SSH key
+cat >> .env << EOF
+GITHUB_REPO=https://github.com/YOUR_USERNAME/nanda-misalignment.git
+VAST_AI_API_KEY=your_api_key_here
+SSH_KEY_PATH=~/.ssh/id_rsa  # Or your preferred SSH key
+EOF
 ```
 
-### Step 3: Run Experiments Automatically
+### Step 3: Run Experiments (with Tmux Support!)
 ```bash
 # Extract IP and PORT from the SSH command
 # If SSH command is: ssh root@123.45.67.89 -p 12345
@@ -48,6 +59,23 @@ echo "GITHUB_REPO=https://github.com/YOUR_USERNAME/nanda-misalignment.git" > .en
 
 # Quick test run (10 attempts per scenario, ~30 min)
 ./deploy/deploy_run_terminate.sh initial 123.45.67.89 12345
+
+# The experiments run in a tmux session, so you can:
+# 1. Disconnect and let them run in background
+# 2. Reconnect anytime to check progress
+```
+
+### Step 4: Monitor Your Experiments
+```bash
+# Check status without attaching (shows last output, files, resources)
+./deploy/check_experiment_status.sh 123.45.67.89 12345
+
+# Attach to the running tmux session to see live output
+./deploy/attach_to_experiment.sh 123.45.67.89 12345
+# Press Ctrl-b d to detach and leave it running
+
+# Or use the wrapper script for any SSH command
+./deploy/run_remote.sh 123.45.67.89 12345 nvidia-smi
 
 # OR full run (30 attempts per scenario, ~2 hours)
 ./deploy/deploy_run_terminate.sh followup 123.45.67.89 12345
