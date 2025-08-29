@@ -20,7 +20,7 @@ This project tests whether language models can exhibit misaligned behavior in ch
 
 ```bash
 # Clone repository
-git clone https://github.com/YOUR_USERNAME/nanda-misalignment.git
+git clone https://github.com/sinemmy/nanda-misalignment.git
 cd nanda-misalignment
 
 # Create virtual environment
