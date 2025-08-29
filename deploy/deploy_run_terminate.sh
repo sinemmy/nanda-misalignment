@@ -74,15 +74,30 @@ check_requirements() {
     # Validate experiment type
     [[ "$EXPERIMENT_TYPE" =~ ^(initial|followup)$ ]] || die "Invalid experiment type: $EXPERIMENT_TYPE"
     
-    # Load SSH key if available
-    if [[ -f "$LOCAL_ENV" ]]; then
-        source "$LOCAL_ENV"
-        if [[ -n "${SSH_KEY_PATH:-}" ]]; then
-            SSH_KEY_PATH="${SSH_KEY_PATH/#\~/$HOME}"
-            if [[ -f "$SSH_KEY_PATH" ]]; then
-                SSH_OPTS="-i $SSH_KEY_PATH"
-            fi
+    # Load environment variables
+    source "$LOCAL_ENV"
+    
+    # Setup SSH key if available
+    if [[ -n "${SSH_KEY_PATH:-}" ]]; then
+        SSH_KEY_PATH="${SSH_KEY_PATH/#\~/$HOME}"
+        if [[ -f "$SSH_KEY_PATH" ]]; then
+            SSH_OPTS="-i $SSH_KEY_PATH"
+            info "Using SSH key: $SSH_KEY_PATH"
         fi
+    fi
+    
+    # Check and configure vastai CLI for auto-termination
+    if [[ -n "${VAST_AI_API_KEY:-}" ]]; then
+        if command -v vastai &>/dev/null; then
+            vastai set api-key "$VAST_AI_API_KEY" 2>/dev/null && \
+                info "✅ Auto-termination enabled (VAST_AI_API_KEY configured)"
+        else
+            warn "vastai CLI not installed - auto-termination disabled"
+            echo "Install with: pip install vastai"
+        fi
+    else
+        warn "⚠️ VAST_AI_API_KEY not set - auto-termination disabled"
+        warn "Add VAST_AI_API_KEY to .env to enable auto-termination"
     fi
     
     # Check SSH connectivity
@@ -201,19 +216,43 @@ tmux send-keys -t misalignment_exp "echo 'Experiments complete. Archive created:
 tmux send-keys -t misalignment_exp "touch /tmp/experiment_complete" C-m
 
 echo "Experiments started in tmux session 'misalignment_exp'"
-echo "To monitor progress: tmux attach -t misalignment_exp"
-echo "Waiting for completion..."
+echo "To monitor progress: ./deploy/attach_to_experiment.sh $VAST_IP $VAST_PORT"
+echo "Waiting for completion (max $MAX_RUNTIME_HOURS hours)..."
 
 # Wait for experiments to complete (check every 30 seconds)
-while true; do
+elapsed=0
+max_wait=$((MAX_RUNTIME_HOURS * 3600))  # Convert hours to seconds
+
+while [[ \$elapsed -lt \$max_wait ]]; do
     if [[ -f /tmp/experiment_complete ]]; then
-        echo "Experiments completed!"
+        echo
+        echo "✅ Experiments completed successfully!"
         rm -f /tmp/experiment_complete
         break
     fi
+    
+    # Show progress
+    if [[ \$((elapsed % 300)) -eq 0 ]] && [[ \$elapsed -gt 0 ]]; then
+        echo
+        echo "Still running... (\$((elapsed / 60)) minutes elapsed)"
+        # Check if tmux session still exists
+        if ! tmux has-session -t misalignment_exp 2>/dev/null; then
+            echo "⚠️ Tmux session ended unexpectedly"
+            break
+        fi
+    else
+        echo -n "."
+    fi
+    
     sleep 30
-    echo -n "."
+    elapsed=\$((elapsed + 30))
 done
+
+if [[ \$elapsed -ge \$max_wait ]]; then
+    echo
+    echo "⚠️ Timeout reached after $MAX_RUNTIME_HOURS hours"
+    echo "Experiments may still be running. Check manually."
+fi
 ENDSSH
 }
 
@@ -254,36 +293,90 @@ ENDSSH
 auto_terminate_instance() {
     info "Attempting automatic instance termination..."
     
-    if command -v vastai &>/dev/null; then
-        # Try to find and terminate the instance
+    # Check if VAST_AI_API_KEY is available
+    if [[ -z "${VAST_AI_API_KEY:-}" ]]; then
+        warn "VAST_AI_API_KEY not set - cannot auto-terminate"
+        warn "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        warn "⚠️  MANUAL TERMINATION REQUIRED"
+        warn "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "1. Go to https://vast.ai/console/instances/"
+        echo "2. Find instance with IP: $VAST_IP"
+        echo "3. Click 'Destroy' to stop billing"
+        return 1
+    fi
+    
+    if ! command -v vastai &>/dev/null; then
+        warn "vastai CLI not installed - cannot auto-terminate"
+        echo "Install with: pip install vastai"
+        warn "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        warn "⚠️  MANUAL TERMINATION REQUIRED"
+        warn "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+        echo "Go to vast.ai console and destroy instance: $VAST_IP"
+        return 1
+    fi
+    
+    # Configure API key
+    vastai set api-key "$VAST_AI_API_KEY" &>/dev/null
+    
+    info "Looking for instance with IP: $VAST_IP"
+    
+    # Try multiple methods to find the instance
+    instance_id=""
+    
+    # Method 1: Find by IP address
+    instance_id=$(vastai show instances --raw 2>/dev/null | \
+        python3 -c "import sys, json
+try:
+    instances = json.load(sys.stdin)
+    for i in instances:
+        if i.get('public_ipaddr') == '$VAST_IP' or i.get('ssh_host') == '$VAST_IP':
+            print(i['id'])
+            break
+except: pass" 2>/dev/null)
+    
+    # Method 2: Find by SSH port if IP didn't work
+    if [[ -z "$instance_id" ]]; then
         instance_id=$(vastai show instances --raw 2>/dev/null | \
-            python3 -c "import sys, json; instances = json.load(sys.stdin); \
-            matching = [i['id'] for i in instances if i.get('public_ipaddr') == '$VAST_IP']; \
-            print(matching[0] if matching else '')" 2>/dev/null)
+            python3 -c "import sys, json
+try:
+    instances = json.load(sys.stdin)
+    for i in instances:
+        if str(i.get('ssh_port', '')) == '$VAST_PORT':
+            print(i['id'])
+            break
+except: pass" 2>/dev/null)
+    fi
+    
+    if [[ -n "$instance_id" ]]; then
+        info "Found instance ID: $instance_id"
+        info "Terminating instance..."
         
-        if [[ -n "$instance_id" ]]; then
-            info "Found instance ID: $instance_id"
-            if vastai destroy instance "$instance_id" 2>/dev/null; then
-                info "✅ Instance auto-terminated! No more charges."
-                return 0
-            else
-                warn "Failed to auto-terminate. Manual termination required."
-            fi
+        # Try to destroy the instance
+        if vastai destroy instance "$instance_id"; then
+            echo
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            info "✅ INSTANCE AUTO-TERMINATED!"
+            info "✅ Billing has stopped."
+            info "✅ No more charges."
+            echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+            return 0
         else
-            warn "Could not find instance ID for auto-termination."
+            warn "Failed to terminate instance $instance_id"
         fi
     else
-        warn "vastai CLI not installed. Cannot auto-terminate."
-        echo "Install with: pip install vastai"
-        echo "Configure with: vastai set api-key YOUR_KEY"
+        warn "Could not find instance ID for $VAST_IP:$VAST_PORT"
     fi
     
     # If we couldn't auto-terminate, show manual instructions
     echo
     warn "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    warn "⚠️  AUTO-TERMINATION FAILED"
     warn "⚠️  MANUAL TERMINATION REQUIRED"
     warn "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
-    echo "Go to vast.ai console and destroy instance: $VAST_IP"
+    echo "Please manually terminate the instance:"
+    echo "1. Go to https://vast.ai/console/instances/"
+    echo "2. Find instance: $VAST_IP:$VAST_PORT"
+    echo "3. Click 'Destroy' to stop billing"
     return 1
 }
 
