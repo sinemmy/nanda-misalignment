@@ -400,9 +400,18 @@ main() {
     run_experiments
     download_results
     cleanup_remote
-    auto_terminate_instance
+    # auto_terminate_instance  # COMMENTED OUT - manual termination required
     
-    info "✅ Workflow complete!"
+    warn "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    warn "⚠️  AUTO-TERMINATION DISABLED"
+    warn "⚠️  MANUAL TERMINATION REQUIRED"
+    warn "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+    echo "Please manually terminate the instance when done:"
+    echo "1. Go to https://vast.ai/console/instances/"
+    echo "2. Find instance: $VAST_IP:$VAST_PORT"
+    echo "3. Click 'Destroy' to stop billing"
+    
+    info "✅ Workflow complete (except termination)!"
 }
 
 # Run main function
