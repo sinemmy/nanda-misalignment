@@ -86,19 +86,21 @@ check_requirements() {
         fi
     fi
     
-    # Check and configure vastai CLI for auto-termination
-    if [[ -n "${VAST_AI_API_KEY:-}" ]]; then
-        if command -v vastai &>/dev/null; then
-            vastai set api-key "$VAST_AI_API_KEY" 2>/dev/null && \
-                info "✅ Auto-termination enabled (VAST_AI_API_KEY configured)"
-        else
-            warn "vastai CLI not installed - auto-termination disabled"
-            echo "Install with: pip install vastai"
-        fi
-    else
-        warn "⚠️ VAST_AI_API_KEY not set - auto-termination disabled"
-        warn "Add VAST_AI_API_KEY to .env to enable auto-termination"
-    fi
+    # Check and configure vastai CLI for auto-termination (DISABLED FOR DEBUGGING)
+    warn "⚠️ AUTO-TERMINATION DISABLED FOR DEBUGGING"
+    warn "Remember to manually terminate instance when done!"
+    # if [[ -n "${VAST_AI_API_KEY:-}" ]]; then
+    #     if command -v vastai &>/dev/null; then
+    #         vastai set api-key "$VAST_AI_API_KEY" 2>/dev/null && \
+    #             info "✅ Auto-termination enabled (VAST_AI_API_KEY configured)"
+    #     else
+    #         warn "vastai CLI not installed - auto-termination disabled"
+    #         echo "Install with: pip install vastai"
+    #     fi
+    # else
+    #     warn "⚠️ VAST_AI_API_KEY not set - auto-termination disabled"
+    #     warn "Add VAST_AI_API_KEY to .env to enable auto-termination"
+    # fi
     
     # Check SSH connectivity
     info "Checking SSH connectivity..."
