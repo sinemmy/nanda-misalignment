@@ -4,17 +4,11 @@ python-dotenv
 beautifulsoup4
 lxml
 
-# For HuggingFace model loading (Qwen-14B)
-# Note: torch is pre-installed in PyTorch Docker image
+# For HuggingFace model loading
+# Note: torch and numpy are pre-installed in PyTorch Docker image
 transformers
-accelerate
-datasets
 sentencepiece
 tokenizers
 
-# Additional utilities
+# Additional utilities  
 tqdm
-numpy
-
-# vast.ai management (optional but recommended)
-vastai
