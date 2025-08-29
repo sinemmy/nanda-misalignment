@@ -1,118 +1,124 @@
-# Deploying to vast.ai - Step by Step Guide
+# Deploying to vast.ai - CLI Only Guide
 
 ## Prerequisites
-1. Create a vast.ai account and add credits
-2. Have your SSH key ready
-
-## Step 1: Choose an Instance
-1. Go to vast.ai console
-2. Filter for:
-   - GPU: RTX 4090 (24GB) or A100 (40GB)
-   - Disk: 50GB+
-   - OS: Ubuntu 22.04
-   - CUDA: 12.0+
-3. Select a spot/interruptible instance (~$0.50/hr for 4090)
-4. Click "RENT" and wait for instance to start
-
-## Step 2: Get Connection Info
-Once running, you'll see connection details like:
-```
-ssh root@123.45.67.89 -p 12345
-```
-
-## Step 3: Deploy Your Code
-
-### Recommended: Use Automated Scripts
-The easiest way is to use our automated scripts from your local machine:
-
+1. Create a vast.ai account and add credits ($10-20 is plenty)
+2. Install and configure vast.ai CLI:
 ```bash
-# Configure .env with your GitHub repo
+pip install vastai
+vastai set api-key YOUR_API_KEY  # Get from https://vast.ai/account
+```
+
+## Quick Start - Complete CLI Workflow
+
+### Step 1: Find and Rent an Instance
+```bash
+# Search for cheapest RTX 4090 instances
+vastai search offers 'gpu_name=RTX_4090 disk_space>50 cuda_vers>=12.0 inet_down>100' --order dph
+
+# This shows a list like:
+# ID      GPU           $/hr   Disk   Location
+# 123456  RTX_4090×1    0.45   80GB   US-CA
+# 789012  RTX_4090×1    0.48   120GB  US-TX
+
+# Rent the instance (replace 123456 with actual ID)
+vastai create instance 123456 --image pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime --disk 50 --ssh
+
+# Wait for instance to start (takes 1-2 minutes)
+vastai show instances
+
+# Look for your instance and note:
+# - Status: running
+# - SSH command: ssh root@123.45.67.89 -p 12345
+```
+
+### Step 2: Configure Your Repository
+```bash
+# One-time setup
+cp .env.example .env
+
+# Edit .env and set your GitHub repo
 echo "GITHUB_REPO=https://github.com/YOUR_USERNAME/nanda-misalignment.git" > .env
+```
 
-# Run complete workflow (deploys, runs, downloads, terminates)
+### Step 3: Run Experiments Automatically
+```bash
+# Extract IP and PORT from the SSH command
+# If SSH command is: ssh root@123.45.67.89 -p 12345
+# Then: IP=123.45.67.89, PORT=12345
+
+# Quick test run (10 attempts per scenario, ~30 min)
 ./deploy/deploy_run_terminate.sh initial 123.45.67.89 12345
+
+# OR full run (30 attempts per scenario, ~2 hours)
+./deploy/deploy_run_terminate.sh followup 123.45.67.89 12345
 ```
 
-This handles everything automatically!
+The script will automatically:
+1. Deploy your code from GitHub
+2. Download the model (first time, ~15 min)
+3. Run all experiments (model stays loaded)
+4. Download results to `./results_[timestamp]/`
+5. Clean up sensitive files
+6. **TERMINATE the instance** (no more charges!)
 
-### Option B: Direct Upload (No GitHub)
-1. On your local machine, create archive:
+## Alternative: Rent Instance with One Command
+
 ```bash
-cd /Users/oshun/Documents/GitHub/NandaStream
-tar -czf nanda-misalignment.tar.gz nanda-misalignment/ \
-    --exclude='.venv' \
-    --exclude='__pycache__' \
-    --exclude='model_cache' \
-    --exclude='outputs'
+# Combine search and rent in one line (rents cheapest available)
+OFFER_ID=$(vastai search offers 'gpu_name=RTX_4090 disk_space>50 cuda_vers>=12.0' --order dph | head -2 | tail -1 | awk '{print $1}')
+vastai create instance $OFFER_ID --image pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime --disk 50 --ssh
+
+# Get connection details after it starts
+sleep 60  # Wait for instance to start
+vastai show instances
 ```
 
-2. Upload to vast.ai instance:
+## Monitoring Your Instance
+
 ```bash
-scp -P 12345 nanda-misalignment.tar.gz root@123.45.67.89:/workspace/
+# Check instance status
+vastai show instances
+
+# Get instance ID if you know the IP
+INSTANCE_ID=$(vastai show instances --raw | python3 -c "import sys, json; d=json.load(sys.stdin); print([i['id'] for i in d if i.get('public_ipaddr')=='YOUR_IP'][0])")
+
+# SSH into instance to monitor
+ssh root@IP -p PORT
+tmux attach  # If experiments are running in tmux
+nvidia-smi   # Check GPU usage
+tail -f /workspace/nanda-misalignment/outputs/*/experiment*.log
+
+# Manual termination if needed
+vastai destroy instance $INSTANCE_ID
 ```
 
-3. SSH in and extract:
-```bash
-ssh root@123.45.67.89 -p 12345
-cd /workspace
-tar -xzf nanda-misalignment.tar.gz
-cd nanda-misalignment
-# Now use deploy_run_terminate.sh from your local machine instead
-```
+## Cost Breakdown
 
-### Option C: Direct Copy (Simple but Slower)
-```bash
-# Copy entire directory (excluding large files)
-rsync -avz -e "ssh -p 12345" \
-    --exclude='.venv' \
-    --exclude='model_cache' \
-    --exclude='__pycache__' \
-    /Users/oshun/Documents/GitHub/NandaStream/nanda-misalignment/ \
-    root@123.45.67.89:/workspace/nanda-misalignment/
-```
-
-## Step 4: Upload .env File (IMPORTANT!)
-The .env file is gitignored, so upload it separately:
-```bash
-scp -P 12345 .env root@123.45.67.89:/workspace/nanda-misalignment/
-```
-
-## Step 5: Run Setup
-```bash
-cd /workspace/nanda-misalignment
-# Now use deploy_run_terminate.sh from your local machine instead
-```
-
-## Step 6: Test & Run Experiments
-```bash
-# Test the setup
-python test_setup.py
-
-# Run a quick test
-python main.py --test --scenario murder --max-attempts 2
-
-# Run full experiments
-python main.py --scenario all --max-attempts 30
-
-# Monitor in another terminal
-./monitor.sh
-```
-
-## Step 7: Download Results
-After experiments complete:
-```bash
-# From your local machine
-scp -P 12345 -r root@123.45.67.89:/workspace/nanda-misalignment/outputs ./
-```
+- RTX 4090: ~$0.45-0.55/hour
+- Experiment time: 1-3 hours
+- Total cost per run: ~$0.50-1.50
 
 ## Tips
-- Use `tmux` or `screen` to keep experiments running if SSH disconnects
-- Monitor GPU with `watch -n 1 nvidia-smi`
-- Check logs in `outputs/qwen14b/` for progress
-- Stop instance when done to avoid charges
+
+1. **Use tmux on remote**: The deploy script doesn't use tmux, but you can SSH in and use it:
+   ```bash
+   ssh root@IP -p PORT
+   tmux new -s monitor
+   tail -f /workspace/nanda-misalignment/outputs/*/experiment*.log
+   ```
+
+2. **Check prices**: Add `--order dph` to sort by price (dollars per hour)
+
+3. **Filter by location**: Add `geolocation=[US-CA]` for specific regions
+
+4. **A100 for larger experiments**: 
+   ```bash
+   vastai search offers 'gpu_name=A100 disk_space>50' --order dph
+   ```
 
 ## Troubleshooting
-- **Permission denied**: Check SSH port number (it's not 22!)
-- **Out of memory**: Use A100 instead of 4090
-- **Model download fails**: Check disk space with `df -h`
-- **Connection drops**: Use `tmux new -s experiment` before running
+
+- **"No suitable offers"**: Lower your requirements (less disk space, older CUDA)
+- **Instance won't start**: Check if you have enough credits
+- **SSH connection refused**: Wait 1-2 minutes for instance to fully start
+- **Auto-terminate fails**: Manually run `vastai destroy instance INSTANCE_ID`

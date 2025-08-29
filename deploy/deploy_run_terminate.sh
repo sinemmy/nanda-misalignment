@@ -17,8 +17,12 @@ readonly VAST_IP="${2:-}"
 readonly VAST_PORT="${3:-22}"
 readonly MAX_RUNTIME_HOURS="${4:-4}"
 
+# Get script directory and project root
+readonly SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
+readonly PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
 # Paths
-readonly LOCAL_ENV="./.env"
+readonly LOCAL_ENV="${PROJECT_ROOT}/.env"
 readonly REMOTE_WORKSPACE="/workspace/nanda-misalignment"
 readonly REMOTE_TMP="/tmp/.env.$$"  # Use PID for unique temp file
 
@@ -70,9 +74,20 @@ check_requirements() {
     # Validate experiment type
     [[ "$EXPERIMENT_TYPE" =~ ^(initial|followup)$ ]] || die "Invalid experiment type: $EXPERIMENT_TYPE"
     
+    # Load SSH key if available
+    if [[ -f "$LOCAL_ENV" ]]; then
+        source "$LOCAL_ENV"
+        if [[ -n "${SSH_KEY_PATH:-}" ]]; then
+            SSH_KEY_PATH="${SSH_KEY_PATH/#\~/$HOME}"
+            if [[ -f "$SSH_KEY_PATH" ]]; then
+                SSH_OPTS="-i $SSH_KEY_PATH"
+            fi
+        fi
+    fi
+    
     # Check SSH connectivity
     info "Checking SSH connectivity..."
-    ssh -o ConnectTimeout=5 -p "$VAST_PORT" "root@$VAST_IP" "echo 'Connected'" &>/dev/null || \
+    ssh ${SSH_OPTS:-} -o ConnectTimeout=5 -o StrictHostKeyChecking=no -p "$VAST_PORT" "root@$VAST_IP" "echo 'Connected'" &>/dev/null || \
         die "Cannot connect to $VAST_IP:$VAST_PORT"
 }
 
@@ -80,10 +95,10 @@ deploy_code() {
     info "Deploying code securely..."
     
     # Upload .env to temporary location with restricted permissions
-    scp -P "$VAST_PORT" "$LOCAL_ENV" "root@$VAST_IP:$REMOTE_TMP"
+    scp ${SSH_OPTS:-} -o StrictHostKeyChecking=no -P "$VAST_PORT" "$LOCAL_ENV" "root@$VAST_IP:$REMOTE_TMP"
     
     # Deploy and setup on remote
-    ssh -p "$VAST_PORT" "root@$VAST_IP" << 'ENDSSH'
+    ssh ${SSH_OPTS:-} -o StrictHostKeyChecking=no -p "$VAST_PORT" "root@$VAST_IP" << 'ENDSSH'
 set -euo pipefail
 
 # Source the temporary env file
@@ -158,24 +173,47 @@ run_experiments() {
         experiment_cmd="python main.py --scenario all --max-attempts 30 --early-stop 5 --output-dir ./outputs/mech_interp"
     fi
     
-    ssh -p "$VAST_PORT" "root@$VAST_IP" << ENDSSH
-cd $REMOTE_WORKSPACE
-source .venv/bin/activate
+    # Create a tmux session for the experiments
+    info "Starting tmux session 'misalignment_exp'..."
+    
+    ssh ${SSH_OPTS:-} -o StrictHostKeyChecking=no -p "$VAST_PORT" "root@$VAST_IP" << ENDSSH
+# Install tmux if not present
+if ! command -v tmux &>/dev/null; then
+    apt-get update && apt-get install -y tmux
+fi
 
-# Run experiments
-$experiment_cmd
+# Kill any existing session with same name
+tmux kill-session -t misalignment_exp 2>/dev/null || true
 
-# Analyze results
-python analyze_results.py --dir ./outputs/${EXPERIMENT_TYPE}_* --verbose --export ./outputs/analysis.json
+# Create new tmux session
+tmux new-session -d -s misalignment_exp
 
-# Create archive
-tar -czf ${EXPERIMENT_TYPE}_results.tar.gz \
-    outputs/${EXPERIMENT_TYPE}_*/*.json \
-    outputs/${EXPERIMENT_TYPE}_*/*.txt \
-    outputs/analysis.json \
-    --exclude='*.log' 2>/dev/null || true
+# Send commands to tmux session
+tmux send-keys -t misalignment_exp "cd $REMOTE_WORKSPACE" C-m
+tmux send-keys -t misalignment_exp "source .venv/bin/activate" C-m
+tmux send-keys -t misalignment_exp "# Running experiments..." C-m
+tmux send-keys -t misalignment_exp "$experiment_cmd" C-m
+tmux send-keys -t misalignment_exp "# Analyzing results..." C-m
+tmux send-keys -t misalignment_exp "python analyze_results.py --dir ./outputs/${EXPERIMENT_TYPE}_* --verbose --export ./outputs/analysis.json" C-m
+tmux send-keys -t misalignment_exp "# Creating archive..." C-m
+tmux send-keys -t misalignment_exp "tar -czf ${EXPERIMENT_TYPE}_results.tar.gz outputs/${EXPERIMENT_TYPE}_*/*.json outputs/${EXPERIMENT_TYPE}_*/*.txt outputs/analysis.json --exclude='*.log' 2>/dev/null || true" C-m
+tmux send-keys -t misalignment_exp "echo 'Experiments complete. Archive created: ${EXPERIMENT_TYPE}_results.tar.gz'" C-m
+tmux send-keys -t misalignment_exp "touch /tmp/experiment_complete" C-m
 
-echo "Experiments complete. Archive created: ${EXPERIMENT_TYPE}_results.tar.gz"
+echo "Experiments started in tmux session 'misalignment_exp'"
+echo "To monitor progress: tmux attach -t misalignment_exp"
+echo "Waiting for completion..."
+
+# Wait for experiments to complete (check every 30 seconds)
+while true; do
+    if [[ -f /tmp/experiment_complete ]]; then
+        echo "Experiments completed!"
+        rm -f /tmp/experiment_complete
+        break
+    fi
+    sleep 30
+    echo -n "."
+done
 ENDSSH
 }
 
@@ -188,7 +226,7 @@ download_results() {
     mkdir -p "$results_dir"
     
     # Download archive
-    scp -P "$VAST_PORT" \
+    scp ${SSH_OPTS:-} -o StrictHostKeyChecking=no -P "$VAST_PORT" \
         "root@$VAST_IP:$REMOTE_WORKSPACE/${EXPERIMENT_TYPE}_results.tar.gz" \
         "$results_dir/" || warn "Failed to download results archive"
     
@@ -204,7 +242,7 @@ download_results() {
 cleanup_remote() {
     info "Cleaning up sensitive files on remote..."
     
-    ssh -p "$VAST_PORT" "root@$VAST_IP" << 'ENDSSH' || true
+    ssh ${SSH_OPTS:-} -o StrictHostKeyChecking=no -p "$VAST_PORT" "root@$VAST_IP" << 'ENDSSH' || true
 # Clean up sensitive files
 find /workspace -name ".env*" -type f -exec shred -vfz {} \; 2>/dev/null
 find /tmp -name ".env*" -type f -exec shred -vfz {} \; 2>/dev/null
@@ -259,6 +297,9 @@ main() {
     echo "Experiment: $EXPERIMENT_TYPE"
     echo "Instance: $VAST_IP:$VAST_PORT"
     echo "Max runtime: $MAX_RUNTIME_HOURS hours"
+    echo
+    echo -e "${GREEN}Experiments will run in a tmux session.${NC}"
+    echo -e "${GREEN}You can disconnect and reconnect at any time!${NC}"
     echo
     
     check_requirements
