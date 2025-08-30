@@ -54,3 +54,4 @@ instance_info.txt
 vast_instance_info.txt
 ssh_config.txt
 .vast_instance
+*.gz
