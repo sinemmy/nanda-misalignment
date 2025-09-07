@@ -148,6 +148,8 @@ source .venv/bin/activate
 # Install/update dependencies
 pip install --upgrade pip
 pip install -r requirements.txt
+# CRITICAL: Install torch and accelerate explicitly (often missing even with PyTorch Docker)
+pip install torch accelerate
 
 # Pre-download model if not cached
 if [[ ! -d "model_cache" ]] || [[ -z "$(ls -A model_cache 2>/dev/null)" ]]; then

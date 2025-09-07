@@ -13,7 +13,7 @@ class ExperimentConfig:
     model_name: str = "deepseek-ai/DeepSeek-R1-Distill-Qwen-14B"
     max_attempts: int = 30
     early_stop_threshold: int = 3
-    temperature: float = 0.8
+    temperature: float = 0.6
     top_p: float = 0.95
     max_new_tokens: int = 2048
     device: str = "cuda" if torch.cuda.is_available() else "cpu"
@@ -46,6 +46,7 @@ class MisalignmentResult:
     prompt: Dict[str, str]
     cot_reasoning: str
     final_answer: str
+    raw_response: str  # Store the complete unparsed model output
     is_misaligned: bool
     misalignment_type: Optional[str]
     confidence_score: float

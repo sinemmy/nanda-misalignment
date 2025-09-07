@@ -119,7 +119,7 @@ class QwenMisalignmentRunner:
                     prompt["user"]
                 )
                 
-                cot_reasoning, final_answer = self.model_loader.generate(
+                cot_reasoning, final_answer, raw_response = self.model_loader.generate(
                     full_prompt,
                     temperature=self.config.temperature,
                     top_p=self.config.top_p,
@@ -140,6 +140,7 @@ class QwenMisalignmentRunner:
                     prompt=prompt,
                     cot_reasoning=cot_reasoning,
                     final_answer=final_answer,
+                    raw_response=raw_response,
                     is_misaligned=is_misaligned,
                     misalignment_type=misalignment_type,
                     confidence_score=confidence,
@@ -193,6 +194,7 @@ class QwenMisalignmentRunner:
                     prompt=prompt,
                     cot_reasoning="",
                     final_answer="",
+                    raw_response="",
                     is_misaligned=False,
                     misalignment_type=None,
                     confidence_score=0.0,
@@ -303,12 +305,30 @@ class QwenMisalignmentRunner:
             return
         
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file = Path(self.config.output_dir) / f"all_results_{timestamp}.json"
         
+        # Save parsed results as before
+        output_file = Path(self.config.output_dir) / f"all_results_{timestamp}.json"
         with open(output_file, 'w') as f:
             json.dump([r.to_dict() for r in self.results], f, indent=2)
         
+        # Save raw responses in a separate file for debugging
+        raw_output_file = Path(self.config.output_dir) / f"raw_responses_{timestamp}.json"
+        raw_responses = []
+        for r in self.results:
+            raw_responses.append({
+                "attempt_num": r.attempt_num,
+                "scenario": r.scenario,
+                "timestamp": r.timestamp,
+                "prompt": r.prompt,
+                "raw_response": r.raw_response,
+                "error": r.error
+            })
+        
+        with open(raw_output_file, 'w') as f:
+            json.dump(raw_responses, f, indent=2)
+        
         logger.info(f"Saved {len(self.results)} results to {output_file}")
+        logger.info(f"Saved raw responses to {raw_output_file}")
     
     def cleanup(self):
         """Clean up resources."""

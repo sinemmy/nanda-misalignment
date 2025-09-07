@@ -8,6 +8,7 @@ import logging
 import sys
 from pathlib import Path
 from dotenv import load_dotenv
+import torch
 
 from src.config import ExperimentConfig
 from src.runner import QwenMisalignmentRunner
@@ -72,8 +73,8 @@ Examples:
     parser.add_argument(
         '--temperature',
         type=float,
-        default=0.8,
-        help='Generation temperature (default: 0.8)'
+        default=0.6,
+        help='Generation temperature (default: 0.6)'
     )
     
     parser.add_argument(
@@ -159,7 +160,7 @@ def main():
         temperature=args.temperature,
         top_p=args.top_p,
         max_new_tokens=args.max_tokens,
-        device='cpu' if args.cpu else 'cuda',
+        device='cpu' if args.cpu else ('cuda' if torch.cuda.is_available() else 'cpu'),
         cache_dir=args.cache_dir,
         output_dir=args.output_dir,
         verbose=args.verbose,

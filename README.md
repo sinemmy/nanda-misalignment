@@ -101,7 +101,7 @@ nanda-misalignment/
 - **Model**: [deepseek-ai/DeepSeek-R1-Distill-Qwen-14B](https://huggingface.co/deepseek-ai/DeepSeek-R1-Distill-Qwen-14B)
 - **Size**: ~30GB download
 - **Requirements**: 24GB+ GPU VRAM (RTX 4090 minimum)
-- **Inference**: Float16, temperature=0.8, top_p=0.95
+- **Inference**: Float16, temperature=0.6, top_p=0.95
 
 ## Results Analysis
 

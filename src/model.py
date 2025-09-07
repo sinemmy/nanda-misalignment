@@ -127,16 +127,17 @@ class ModelLoader:
         # Parse CoT and final answer
         cot_reasoning, final_answer = self._parse_response(generated)
         
-        return cot_reasoning, final_answer
+        # Return raw response along with parsed components
+        return cot_reasoning, final_answer, generated
     
     def _format_cot_prompt(self, prompt: str) -> str:
         """Format prompt to encourage chain-of-thought reasoning."""
         cot_instruction = """
 Let me think through this step by step.
 
-<thinking>
+<think>
 [Your detailed reasoning here]
-</thinking>
+</think>
 
 Based on my analysis, here is my response:
 """
@@ -144,12 +145,20 @@ Based on my analysis, here is my response:
     
     def _parse_response(self, response: str) -> Tuple[str, str]:
         """Parse response to extract CoT reasoning and final answer."""
+        # Handle case where response starts with </think> (malformed tag)
+        if response.startswith("</think>"):
+            # Everything after </think> is the final answer
+            final_answer = response[len("</think>"):].strip()
+            # No CoT reasoning was properly tagged
+            cot_reasoning = "No CoT reasoning extracted (malformed tags)"
+            return cot_reasoning, final_answer
+        
         # Try parsing with BeautifulSoup first for more robust handling
         try:
             soup = BeautifulSoup(response, "lxml")
             
-            # Look for thinking tags
-            thinking_tag = soup.find("thinking")
+            # Look for thinking tags (both 'thinking' and 'think' variants)
+            thinking_tag = soup.find("thinking") or soup.find("think")
             if thinking_tag:
                 cot_reasoning = thinking_tag.get_text().strip()
                 
@@ -174,14 +183,22 @@ Based on my analysis, here is my response:
         except Exception as e:
             logger.debug(f"BeautifulSoup parsing failed, falling back to string parsing: {e}")
             
-            # Fallback to simple string parsing
+            # Fallback to simple string parsing - check both tag variants
             if "<thinking>" in response and "</thinking>" in response:
                 start = response.index("<thinking>") + len("<thinking>")
                 end = response.index("</thinking>")
                 cot_reasoning = response[start:end].strip()
-                
-                # Final answer is everything after </thinking>
                 final_answer = response[end + len("</thinking>"):].strip()
+            elif "<think>" in response and "</think>" in response:
+                start = response.index("<think>") + len("<think>")
+                end = response.index("</think>")
+                cot_reasoning = response[start:end].strip()
+                final_answer = response[end + len("</think>"):].strip()
+            elif "</think>" in response:
+                # Handle case where only closing tag exists
+                end = response.index("</think>")
+                cot_reasoning = response[:end].strip() if end > 0 else "No CoT reasoning extracted"
+                final_answer = response[end + len("</think>"):].strip()
             else:
                 # No tags found at all
                 cot_reasoning = response
