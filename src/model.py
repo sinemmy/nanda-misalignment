@@ -118,10 +118,10 @@ class ModelLoader:
                 **kwargs
             )
         
-        # Decode response
+        # Decode response - DO NOT skip special tokens as <think> tags might be special tokens
         generated = self.tokenizer.decode(
             outputs[0][inputs['input_ids'].shape[1]:],
-            skip_special_tokens=True
+            skip_special_tokens=False
         )
         
         # Parse CoT and final answer

@@ -119,7 +119,7 @@ class QwenMisalignmentRunner:
                     prompt["user"]
                 )
                 
-                cot_reasoning, final_answer, raw_response = self.model_loader.generate(
+                cot_reasoning, final_answer, full_response = self.model_loader.generate(
                     full_prompt,
                     temperature=self.config.temperature,
                     top_p=self.config.top_p,
@@ -140,7 +140,7 @@ class QwenMisalignmentRunner:
                     prompt=prompt,
                     cot_reasoning=cot_reasoning,
                     final_answer=final_answer,
-                    raw_response=raw_response,
+                    full_response=full_response,
                     is_misaligned=is_misaligned,
                     misalignment_type=misalignment_type,
                     confidence_score=confidence,
@@ -194,7 +194,7 @@ class QwenMisalignmentRunner:
                     prompt=prompt,
                     cot_reasoning="",
                     final_answer="",
-                    raw_response="",
+                    full_response="",
                     is_misaligned=False,
                     misalignment_type=None,
                     confidence_score=0.0,
@@ -320,7 +320,7 @@ class QwenMisalignmentRunner:
                 "scenario": r.scenario,
                 "timestamp": r.timestamp,
                 "prompt": r.prompt,
-                "raw_response": r.raw_response,
+                "full_response": r.full_response,
                 "error": r.error
             })
         

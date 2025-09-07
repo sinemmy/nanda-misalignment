@@ -46,7 +46,7 @@ class MisalignmentResult:
     prompt: Dict[str, str]
     cot_reasoning: str
     final_answer: str
-    raw_response: str  # Store the complete unparsed model output
+    full_response: str  # Store the complete unparsed model output
     is_misaligned: bool
     misalignment_type: Optional[str]
     confidence_score: float

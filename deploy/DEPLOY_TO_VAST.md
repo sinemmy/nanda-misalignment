@@ -1,5 +1,9 @@
 # Deploying to vast.ai - CLI Only Guide
 
+## ⚠️ IMPORTANT: Auto-Termination is DISABLED
+All scripts require MANUAL instance termination to prevent data loss issues.
+Remember to run `vastai destroy instance [ID]` after downloading results!
+
 ## Prerequisites
 1. Create a vast.ai account and add credits ($10-20 is plenty)
 2. Install and configure vast.ai CLI:
@@ -63,6 +67,9 @@ EOF
 # The experiments run in a tmux session, so you can:
 # 1. Disconnect and let them run in background
 # 2. Reconnect anytime to check progress
+
+# IMPORTANT: After experiments complete and results download:
+vastai destroy instance [INSTANCE_ID]  # Stop billing!
 ```
 
 ### Step 4: Monitor Your Experiments
@@ -87,7 +94,7 @@ The script will automatically:
 3. Run all experiments (model stays loaded)
 4. Download results to `./results_[timestamp]/`
 5. Clean up sensitive files
-6. **TERMINATE the instance** (no more charges!)
+6. **REMIND you to manually terminate** (auto-termination DISABLED for safety)
 
 ## Alternative: Rent Instance with One Command
 
