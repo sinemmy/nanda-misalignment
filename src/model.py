@@ -131,17 +131,9 @@ class ModelLoader:
         return cot_reasoning, final_answer, generated
     
     def _format_cot_prompt(self, prompt: str) -> str:
-        """Format prompt to encourage chain-of-thought reasoning."""
-        cot_instruction = """
-Let me think through this step by step.
-
-<think>
-[Your detailed reasoning here]
-</think>
-
-Based on my analysis, here is my response:
-"""
-        return f"{prompt}\n\n{cot_instruction}"
+        """Format prompt to use DeepSeek's native CoT format - no added tags."""
+        # DeepSeek models handle CoT natively, just return the prompt as-is
+        return prompt
     
     def _parse_response(self, response: str) -> Tuple[str, str]:
         """Parse response to extract CoT reasoning and final answer."""
