@@ -124,35 +124,54 @@ def export_summary(all_analysis: Dict[str, Dict], output_file: Path):
     print(f"\n✅ Summary exported to: {output_file}")
 
 def find_interesting_examples(output_dir: Path, num_examples: int = 5):
-    """Find interesting misalignment examples."""
+    """Find interesting examples - both aligned and misaligned for each scenario."""
     print(f"\n{'='*60}")
-    print(f"INTERESTING MISALIGNMENT EXAMPLES")
+    print(f"EXAMPLE RESPONSES (ALIGNED AND MISALIGNED)")
     print(f"{'='*60}")
     
-    # Load individual misalignment files
+    # Group files by scenario
+    scenarios = defaultdict(lambda: {'aligned': [], 'misaligned': []})
+    
+    # Load misalignment files
     misalignment_files = list(output_dir.glob("misalignment_*.json"))
-    
-    if not misalignment_files:
-        print("No individual misalignment files found")
-        return
-    
-    # Sort by confidence score
-    examples = []
     for file_path in misalignment_files:
         with open(file_path, 'r') as f:
             data = json.load(f)
-            examples.append((data.get('confidence_score', 0), data))
+            scenario = data.get('scenario')
+            scenarios[scenario]['misaligned'].append((data.get('confidence_score', 0), data))
     
-    examples.sort(reverse=True)
+    # Load aligned files
+    aligned_files = list(output_dir.glob("aligned_*.json"))
+    for file_path in aligned_files:
+        with open(file_path, 'r') as f:
+            data = json.load(f)
+            scenario = data.get('scenario')
+            scenarios[scenario]['aligned'].append((data.get('confidence_score', 0), data))
     
-    # Show top examples
-    for i, (confidence, example) in enumerate(examples[:num_examples], 1):
-        print(f"\n--- Example {i} (Confidence: {confidence:.2f}) ---")
-        print(f"Scenario: {example.get('scenario')}")
-        print(f"Type: {example.get('misalignment_type')}")
-        print(f"\nUser Prompt: {example.get('prompt', {}).get('user', '')[:200]}...")
-        print(f"\nCoT Reasoning: {example.get('cot_reasoning', '')[:300]}...")
-        print(f"\nFinal Answer: {example.get('final_answer', '')[:300]}...")
+    # Show 1 aligned and 1 misaligned example for each scenario
+    for scenario in sorted(scenarios.keys()):
+        print(f"\n{'='*50}")
+        print(f"SCENARIO: {scenario.upper()}")
+        print(f"{'='*50}")
+        
+        # Show best misaligned example
+        if scenarios[scenario]['misaligned']:
+            scenarios[scenario]['misaligned'].sort(reverse=True)
+            confidence, example = scenarios[scenario]['misaligned'][0]
+            print(f"\n--- MISALIGNED Example (Confidence: {confidence:.2f}) ---")
+            print(f"Type: {example.get('misalignment_type')}")
+            print(f"User Prompt: {example.get('prompt', {}).get('user', '')[:200]}...")
+            print(f"CoT Reasoning: {example.get('cot_reasoning', '')[:300]}...")
+            print(f"Final Answer: {example.get('final_answer', '')[:300]}...")
+        
+        # Show an aligned example (lowest confidence)
+        if scenarios[scenario]['aligned']:
+            scenarios[scenario]['aligned'].sort()  # Sort by confidence ascending
+            confidence, example = scenarios[scenario]['aligned'][0]
+            print(f"\n--- ALIGNED Example (Confidence: {confidence:.2f}) ---")
+            print(f"User Prompt: {example.get('prompt', {}).get('user', '')[:200]}...")
+            print(f"CoT Reasoning: {example.get('cot_reasoning', '')[:300]}...")
+            print(f"Final Answer: {example.get('final_answer', '')[:300]}...")
 
 def main():
     parser = argparse.ArgumentParser(description="Analyze misalignment experiment results")

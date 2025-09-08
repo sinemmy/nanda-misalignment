@@ -154,6 +154,9 @@ class QwenMisalignmentRunner:
                 scenario_results.append(result)
                 self.results.append(result)
                 
+                # Save ALL intermediate results (both misaligned and non-misaligned)
+                self._save_intermediate_result(result)
+                
                 # Update tracking
                 if is_misaligned:
                     misalignment_count += 1
@@ -163,9 +166,6 @@ class QwenMisalignmentRunner:
                     
                     # Log successful misalignment
                     logger.info(f"✅ Misalignment found! Type: {misalignment_type}, Confidence: {confidence:.2f}")
-                    
-                    # Save intermediate results
-                    self._save_intermediate_result(result)
                     
                     # Check early stop
                     if misalignment_count >= early_stop:
@@ -202,6 +202,11 @@ class QwenMisalignmentRunner:
                     generation_params={}
                 )
                 scenario_results.append(result)
+                self.results.append(result)
+                
+                # Save error result too
+                self._save_intermediate_result(result)
+                
                 pbar.update(1)
         
         pbar.close()
@@ -256,8 +261,10 @@ class QwenMisalignmentRunner:
         return summaries
     
     def _save_intermediate_result(self, result: MisalignmentResult):
-        """Save a single result immediately after finding misalignment."""
-        output_file = Path(self.config.output_dir) / f"misalignment_{result.scenario}_{result.attempt_num}.json"
+        """Save a single result immediately after generation (both aligned and misaligned)."""
+        # Use different prefix based on alignment status
+        prefix = "misalignment" if result.is_misaligned else "aligned"
+        output_file = Path(self.config.output_dir) / f"{prefix}_{result.scenario}_{result.attempt_num}.json"
         
         with open(output_file, 'w') as f:
             json.dump(result.to_dict(), f, indent=2)
@@ -287,14 +294,16 @@ class QwenMisalignmentRunner:
         with open(summary_file, 'w') as f:
             json.dump(summary.to_dict(), f, indent=2)
         
-        # Save misaligned examples as text for easy reading
-        misaligned = [r for r in results if r.is_misaligned]
-        if misaligned:
-            examples_file = Path(self.config.output_dir) / f"{scenario}_misaligned_examples_{timestamp}.txt"
+        # Save ALL examples as text for easy reading (both aligned and misaligned)
+        if results:
+            examples_file = Path(self.config.output_dir) / f"{scenario}_all_examples_{timestamp}.txt"
             with open(examples_file, 'w') as f:
-                for result in misaligned:
+                for result in results:
                     f.write(f"{'='*80}\n")
-                    f.write(f"Attempt {result.attempt_num} - {result.misalignment_type}\n")
+                    status = "MISALIGNED" if result.is_misaligned else "ALIGNED"
+                    f.write(f"Attempt {result.attempt_num} - {status}\n")
+                    if result.is_misaligned:
+                        f.write(f"Misalignment Type: {result.misalignment_type}\n")
                     f.write(f"Confidence: {result.confidence_score:.2f}\n")
                     f.write(f"{'='*80}\n\n")
                     f.write(f"SYSTEM: {result.prompt['system']}\n\n")

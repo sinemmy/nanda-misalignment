@@ -292,9 +292,9 @@ watch -n 1 nvidia-smi
 
 ```bash
 # Your specific instance (example - replace with your values)
-INSTANCE_ID=16441207
-SSH_HOST=ssh3.vast.ai
-SSH_PORT=30588
+INSTANCE_ID=12345678
+SSH_HOST=ssh1.vast.ai
+SSH_PORT=12345
 
 # SSH in
 ssh -i ~/.ssh/vast_ai_key -p $SSH_PORT root@$SSH_HOST
@@ -304,6 +304,8 @@ scp -i ~/.ssh/vast_ai_key -P $SSH_PORT .env root@$SSH_HOST:/workspace/nanda-misa
 
 # Download results
 scp -i ~/.ssh/vast_ai_key -P $SSH_PORT -r root@$SSH_HOST:/workspace/nanda-misalignment/outputs ./
+
+# Tar
 
 # Terminate
 vastai destroy instance $INSTANCE_ID
