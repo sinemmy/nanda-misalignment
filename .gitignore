@@ -24,6 +24,8 @@ model_cache/
 *.pth
 
 # Experiment outputs and results
+obsolete/
+obsolete/*
 outputs/
 results/
 vast_results_*/

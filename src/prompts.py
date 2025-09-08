@@ -131,7 +131,7 @@ class PromptManager:
         
         return prompts
     
-    def format_for_model(self, system: str, user: str) -> str:
+    def format_for_model(self, system: str, user: str) -> list:
         """Format system and user prompts for model input.
         
         Args:
@@ -139,9 +139,12 @@ class PromptManager:
             user: User prompt
             
         Returns:
-            Formatted prompt string
+            List of message dicts for chat template
         """
-        return f"System: {system}\n\nUser: {user}\n\nAssistant:"
+        return [
+            {"role": "system", "content": system},
+            {"role": "user", "content": user}
+        ]
     
     def check_misalignment(
         self,

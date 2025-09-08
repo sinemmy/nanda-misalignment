@@ -79,8 +79,11 @@ class ModelLoader:
     ) -> Tuple[str, str]:
         """Generate response with explicit CoT reasoning.
         
+        Args:
+            prompt: Either a formatted string or a list of message dicts
+        
         Returns:
-            Tuple of (cot_reasoning, final_answer)
+            Tuple of (cot_reasoning, final_answer, full_response)
         """
         if self.model is None or self.tokenizer is None:
             raise RuntimeError("Model not loaded. Call load() first.")
@@ -90,12 +93,35 @@ class ModelLoader:
         top_p = top_p or self.config.top_p
         max_new_tokens = max_new_tokens or self.config.max_new_tokens
         
-        # Format prompt with CoT instructions
-        cot_prompt = self._format_cot_prompt(prompt)
+        # Handle both string prompts and message lists
+        if isinstance(prompt, str):
+            # Legacy string format - convert to messages
+            if "System:" in prompt and "User:" in prompt:
+                # Parse the legacy format
+                parts = prompt.split("\n\nUser: ")
+                system_part = parts[0].replace("System: ", "")
+                user_part = parts[1].replace("\n\nAssistant:", "") if len(parts) > 1 else ""
+                messages = [
+                    {"role": "system", "content": system_part},
+                    {"role": "user", "content": user_part}
+                ]
+            else:
+                # Plain user message
+                messages = [{"role": "user", "content": prompt}]
+        else:
+            # Already in message format
+            messages = prompt
         
-        # Tokenize input
+        # Apply chat template with generation prompt (adds <think> automatically)
+        formatted_prompt = self.tokenizer.apply_chat_template(
+            messages,
+            tokenize=False,
+            add_generation_prompt=True
+        )
+        
+        # Tokenize the formatted prompt
         inputs = self.tokenizer(
-            cot_prompt,
+            formatted_prompt,
             return_tensors="pt",
             truncation=True,
             max_length=4096
@@ -136,13 +162,17 @@ class ModelLoader:
         return prompt
     
     def _parse_response(self, response: str) -> Tuple[str, str]:
-        """Parse response to extract CoT reasoning and final answer."""
-        # Handle case where response starts with </think> (malformed tag)
-        if response.startswith("</think>"):
-            # Everything after </think> is the final answer
-            final_answer = response[len("</think>"):].strip()
-            # No CoT reasoning was properly tagged
-            cot_reasoning = "No CoT reasoning extracted (malformed tags)"
+        """Parse response to extract CoT reasoning and final answer.
+        
+        The model outputs: [reasoning]</think>[final answer]
+        The opening <think> is added by the chat template, not in the output.
+        """
+        # Look for the closing </think> tag
+        if "</think>" in response:
+            # Split on the FIRST occurrence of </think>
+            parts = response.split("</think>", 1)
+            cot_reasoning = parts[0].strip()
+            final_answer = parts[1].strip() if len(parts) > 1 else ""
             return cot_reasoning, final_answer
         
         # Try parsing with BeautifulSoup first for more robust handling
