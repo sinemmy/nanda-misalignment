@@ -1,4 +1,4 @@
-# Deploying to vast.ai - CLI Only Guide
+# Deploying to vast.ai - Detailed Manual Setup Guide
 
 ## ⚠️ IMPORTANT: Auto-Termination is DISABLED
 All scripts require MANUAL instance termination to prevent data loss issues.
@@ -11,149 +11,300 @@ Remember to run `vastai destroy instance [ID]` after downloading results!
 pip install vastai
 vastai set api-key YOUR_API_KEY  # Get from https://vast.ai/account
 ```
-3. (Optional) Set up SSH key for secure connections:
+3. Set up SSH key (IMPORTANT - vast.ai uses a specific key):
 ```bash
-# Generate key if you don't have one
-ssh-keygen -t rsa -b 4096 -f ~/.ssh/vast_key
-# Add the path to your .env file
-echo "SSH_KEY_PATH=~/.ssh/vast_key" >> .env
+# The key is usually at this location after first SSH
+ls ~/.ssh/vast_ai_key
+# If not present, it will be created when you first SSH to an instance
 ```
 
-## Quick Start - Complete CLI Workflow
+## Step 1: Find and Rent an Instance
 
-### Step 1: Find and Rent an Instance
+### Search for Available GPUs
 ```bash
-# Search for cheapest RTX 4090 instances
-vastai search offers 'gpu_name=RTX_4090 disk_space>50 cuda_vers>=12.0 inet_down>100' --order dph
+# Find RTX 4090s with enough disk space (shows top 5 cheapest)
+vastai search offers 'gpu_name=RTX_4090 disk_space>80 reliability>0.99' --order dph --limit 5
 
-# This shows a list like:
-# ID      GPU           $/hr   Disk   Location
-# 123456  RTX_4090×1    0.45   80GB   US-CA
-# 789012  RTX_4090×1    0.48   120GB  US-TX
+# Find RTX 3090s (cheaper alternative)
+vastai search offers 'gpu_name=RTX_3090 disk_space>80 reliability>0.99' --order dph --limit 5
 
-# Rent the instance (replace 123456 with actual ID)
-vastai create instance 123456 --image pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime --disk 50 --ssh
+# Output looks like:
+# ID       GPU           $/hr   Disk   Status
+# 16441207 RTX_4090×1    0.42   120GB  available
+# 234567   RTX_4090×1    0.48   100GB  available
+```
 
-# Wait for instance to start (takes 1-2 minutes)
+### Rent the Instance
+```bash
+# Rent with Ubuntu base (we'll install everything manually)
+# Replace 16441207 with your chosen offer ID
+vastai create instance 16441207 --image ubuntu:22.04 --disk 80 --ssh
+
+# Wait for instance to start (1-2 minutes)
+sleep 60
 vastai show instances
 
-# Look for your instance and note:
-# - Status: running
-# - SSH command: ssh root@123.45.67.89 -p 12345
+# Get connection details
+vastai show instance [INSTANCE_ID]
+# Look for:
+# - ssh_host: e.g., ssh5.vast.ai or ssh3.vast.ai
+# - ssh_port: e.g., 30588 or 21786
 ```
 
-### Step 2: Configure Your Repository
-```bash
-# One-time setup
-cp .env.example .env
+## Step 2: Manual Setup on vast.ai Instance
 
-# Edit .env and set your GitHub repo and SSH key
-cat >> .env << EOF
-GITHUB_REPO=https://github.com/YOUR_USERNAME/nanda-misalignment.git
-VAST_AI_API_KEY=your_api_key_here
-SSH_KEY_PATH=~/.ssh/id_rsa  # Or your preferred SSH key
-EOF
+### SSH into the Instance
+```bash
+# Using the ssh_host and ssh_port from above
+# Example: if ssh_host=ssh3.vast.ai and ssh_port=30588
+ssh -i ~/.ssh/vast_ai_key -p 30588 root@ssh3.vast.ai
+
+# Or get the exact command with:
+vastai ssh-url [INSTANCE_ID]
 ```
 
-### Step 3: Run Experiments (with Tmux Support!)
+### Install System Dependencies
 ```bash
-# Extract IP and PORT from the SSH command
-# If SSH command is: ssh root@123.45.67.89 -p 12345
-# Then: IP=123.45.67.89, PORT=12345
+# Update package lists
+apt-get update
 
-# Quick test run (10 attempts per scenario, ~30 min)
-./deploy/deploy_run_terminate.sh initial 123.45.67.89 12345
+# Install Python, pip, venv, git, and nano
+apt-get install -y python3 python3-pip python3.10-venv git nano
 
-# The experiments run in a tmux session, so you can:
-# 1. Disconnect and let them run in background
-# 2. Reconnect anytime to check progress
-
-# IMPORTANT: After experiments complete and results download:
-vastai destroy instance [INSTANCE_ID]  # Stop billing!
+# Verify installations
+python3 --version  # Should be 3.10 or higher
+git --version
 ```
 
-### Step 4: Monitor Your Experiments
+### Clone and Setup Repository
 ```bash
-# Check status without attaching (shows last output, files, resources)
-./deploy/check_experiment_status.sh 123.45.67.89 12345
+# Navigate to workspace (or home directory)
+cd /workspace
+# Alternative: cd ~
 
-# Attach to the running tmux session to see live output
-./deploy/attach_to_experiment.sh 123.45.67.89 12345
-# Press Ctrl-b d to detach and leave it running
+# Clone your repository
+git clone https://github.com/sinemmy/nanda-misalignment.git
+cd nanda-misalignment
 
-# Or use the wrapper script for any SSH command
-./deploy/run_remote.sh 123.45.67.89 12345 nvidia-smi
+# Create and activate virtual environment
+python3 -m venv .venv
+source .venv/bin/activate
 
-# OR full run (30 attempts per scenario, ~2 hours)
-./deploy/deploy_run_terminate.sh followup 123.45.67.89 12345
+# Upgrade pip
+pip install --upgrade pip
 ```
 
-The script will automatically:
-1. Deploy your code from GitHub
-2. Download the model (first time, ~15 min)
-3. Run all experiments (model stays loaded)
-4. Download results to `./results_[timestamp]/`
-5. Clean up sensitive files
-6. **REMIND you to manually terminate** (auto-termination DISABLED for safety)
-
-## Alternative: Rent Instance with One Command
-
+### Install Python Dependencies
 ```bash
-# Combine search and rent in one line (rents cheapest available)
-OFFER_ID=$(vastai search offers 'gpu_name=RTX_4090 disk_space>50 cuda_vers>=12.0' --order dph | head -2 | tail -1 | awk '{print $1}')
-vastai create instance $OFFER_ID --image pytorch/pytorch:2.1.0-cuda12.1-cudnn8-runtime --disk 50 --ssh
+# Install from requirements.txt
+pip install -r requirements.txt
 
-# Get connection details after it starts
-sleep 60  # Wait for instance to start
+# CRITICAL: Manually install torch and accelerate (often missing even with PyTorch Docker!)
+pip install torch accelerate
+
+# Verify critical packages are installed
+python -c "import torch; print(f'PyTorch: {torch.__version__}')"
+python -c "import accelerate; print('Accelerate installed')"
+python -c "import transformers; print(f'Transformers: {transformers.__version__}')"
+```
+
+## Step 3: Copy Configuration File
+
+### From Your LOCAL Machine
+```bash
+# Copy your .env file to the instance
+# Replace PORT and SSH_HOST with your instance details
+scp -i ~/.ssh/vast_ai_key -P 30588 .env root@ssh3.vast.ai:/workspace/nanda-misalignment/.env
+
+# Verify it was copied (run on vast.ai instance)
+cat /workspace/nanda-misalignment/.env
+```
+
+## Step 4: Run Experiments in tmux
+
+### On the vast.ai Instance
+```bash
+# Start a tmux session (IMPORTANT for long-running experiments!)
+tmux new -s experiments
+
+# Make sure you're in the right directory with venv activated
+cd /workspace/nanda-misalignment
+source .venv/bin/activate
+
+# Run experiments with your desired configuration
+# Quick test (3 attempts per scenario)
+python main.py --scenario all --max-attempts 3 --early-stop 1 --output-dir ./outputs/initial_test
+
+# Or full run (30 attempts per scenario)
+python main.py --scenario all --max-attempts 30 --early-stop 3 --output-dir ./outputs/full_run
+
+# DETACH from tmux (keeps experiment running):
+# Press: Ctrl+B then D
+
+# You can now safely exit SSH:
+exit
+```
+
+## Step 5: Monitor Progress
+
+### Reconnect to Check Progress
+```bash
+# SSH back into the instance
+ssh -i ~/.ssh/vast_ai_key -p 30588 root@ssh3.vast.ai
+
+# List tmux sessions
+tmux ls
+
+# Reattach to see live output
+tmux attach -t experiments
+
+# Or check progress without attaching
+ls -la /workspace/nanda-misalignment/outputs/
+tail -f /workspace/nanda-misalignment/outputs/*/experiment.log
+
+# Check GPU usage
+nvidia-smi
+```
+
+## Step 6: Download Results
+
+### From Your LOCAL Machine
+```bash
+# Download single results file
+scp -i ~/.ssh/vast_ai_key -P 30588 root@ssh3.vast.ai:/workspace/nanda-misalignment/outputs/initial_test/results.json ./
+
+# Download entire output directory
+scp -i ~/.ssh/vast_ai_key -P 30588 -r root@ssh3.vast.ai:/workspace/nanda-misalignment/outputs ./local_results/
+
+# For large results, create archive first (on vast.ai instance)
+ssh -i ~/.ssh/vast_ai_key -p 30588 root@ssh3.vast.ai "cd /workspace/nanda-misalignment && tar -czf results.tar.gz outputs/"
+# Then download the archive
+scp -i ~/.ssh/vast_ai_key -P 30588 root@ssh3.vast.ai:/workspace/nanda-misalignment/results.tar.gz ./
+```
+
+## Step 7: Cleanup and Terminate
+
+### On vast.ai Instance (Optional Cleanup)
+```bash
+# Remove sensitive files before termination
+cd /workspace/nanda-misalignment
+rm -f .env
+rm -rf .venv/  # Optional: remove venv to save space
+```
+
+### From LOCAL Machine - IMPORTANT!
+```bash
+# Get your instance ID
 vastai show instances
+
+# MANUALLY TERMINATE the instance (stops billing!)
+vastai destroy instance [INSTANCE_ID]
+
+# Verify it's terminated
+vastai show instances  # Should not show your instance
 ```
 
-## Monitoring Your Instance
+## Alternative: Using Automated Scripts
+
+If manual setup works but automated scripts fail, you can still use helper scripts:
 
 ```bash
-# Check instance status
-vastai show instances
+# After manual setup, use helper scripts for convenience
+./deploy/attach_to_experiment.sh ssh3.vast.ai 30588  # Attach to tmux
+./deploy/check_experiment_status.sh ssh3.vast.ai 30588  # Check status
 
-# Get instance ID if you know the IP
-INSTANCE_ID=$(vastai show instances --raw | python3 -c "import sys, json; d=json.load(sys.stdin); print([i['id'] for i in d if i.get('public_ipaddr')=='YOUR_IP'][0])")
+# Or use the deploy script with actual values
+./deploy/deploy_run_terminate.sh initial ssh3.vast.ai 30588
+```
 
-# SSH into instance to monitor
-ssh root@IP -p PORT
-tmux attach  # If experiments are running in tmux
-nvidia-smi   # Check GPU usage
-tail -f /workspace/nanda-misalignment/outputs/*/experiment*.log
+## Common Issues and Solutions
 
-# Manual termination if needed
+### 1. Python venv Module Missing
+```bash
+# If you get "No module named venv"
+apt-get install -y python3.10-venv
+# Or for Python 3.11
+apt-get install -y python3.11-venv
+```
+
+### 2. Git Not Found
+```bash
+apt-get update && apt-get install -y git
+```
+
+### 3. Torch/Accelerate Missing Despite requirements.txt
+```bash
+# Always run these explicitly
+pip install torch accelerate
+```
+
+### 4. SSH Permission Denied
+```bash
+# Make sure you're using the vast_ai_key
+ls -la ~/.ssh/vast_ai_key
+# And the correct port (NOT 22!)
+# Use the port shown in: vastai show instance [ID]
+```
+
+### 5. File Transfer Corruption
+```bash
+# For large files, use compression
+# On vast.ai:
+tar -czf outputs.tar.gz outputs/
+# Then transfer the compressed file
+```
+
+### 6. Out of Memory Errors
+```bash
+# Monitor GPU memory
+watch -n 1 nvidia-smi
+# Reduce batch size in code if needed
+```
+
+## Cost Optimization Tips
+
+1. **Model Download**: First run downloads ~30GB model (15-20 min). Keep instance running for multiple experiments to avoid re-downloading.
+
+2. **Use tmux**: Always run in tmux to prevent losing work if SSH disconnects.
+
+3. **Quick Tests First**: Run with `--max-attempts 3` to verify setup before full runs.
+
+4. **Manual Termination**: ALWAYS terminate manually - auto-termination is disabled for safety.
+
+5. **Instance Selection**: 
+   - RTX 4090: Best price/performance (~$0.45/hr)
+   - RTX 3090: Cheaper but slower (~$0.35/hr)
+   - Disk space: Need 80GB+ for model + outputs
+
+## Summary Checklist
+
+- [ ] Rent instance with vast.ai CLI
+- [ ] SSH in and install Python, git, venv
+- [ ] Clone repo and create venv
+- [ ] Install dependencies + manually install torch/accelerate
+- [ ] Copy .env file from local machine
+- [ ] Start tmux session
+- [ ] Run experiments
+- [ ] Download results to local machine
+- [ ] **MANUALLY TERMINATE INSTANCE**
+
+## Quick Reference Commands
+
+```bash
+# Your specific instance (example - replace with your values)
+INSTANCE_ID=16441207
+SSH_HOST=ssh3.vast.ai
+SSH_PORT=30588
+
+# SSH in
+ssh -i ~/.ssh/vast_ai_key -p $SSH_PORT root@$SSH_HOST
+
+# Copy .env
+scp -i ~/.ssh/vast_ai_key -P $SSH_PORT .env root@$SSH_HOST:/workspace/nanda-misalignment/
+
+# Download results
+scp -i ~/.ssh/vast_ai_key -P $SSH_PORT -r root@$SSH_HOST:/workspace/nanda-misalignment/outputs ./
+
+# Terminate
 vastai destroy instance $INSTANCE_ID
 ```
-
-## Cost Breakdown
-
-- RTX 4090: ~$0.45-0.55/hour
-- Experiment time: 1-3 hours
-- Total cost per run: ~$0.50-1.50
-
-## Tips
-
-1. **Use tmux on remote**: The deploy script doesn't use tmux, but you can SSH in and use it:
-   ```bash
-   ssh root@IP -p PORT
-   tmux new -s monitor
-   tail -f /workspace/nanda-misalignment/outputs/*/experiment*.log
-   ```
-
-2. **Check prices**: Add `--order dph` to sort by price (dollars per hour)
-
-3. **Filter by location**: Add `geolocation=[US-CA]` for specific regions
-
-4. **A100 for larger experiments**: 
-   ```bash
-   vastai search offers 'gpu_name=A100 disk_space>50' --order dph
-   ```
-
-## Troubleshooting
-
-- **"No suitable offers"**: Lower your requirements (less disk space, older CUDA)
-- **Instance won't start**: Check if you have enough credits
-- **SSH connection refused**: Wait 1-2 minutes for instance to fully start
-- **Auto-terminate fails**: Manually run `vastai destroy instance INSTANCE_ID`

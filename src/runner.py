@@ -242,7 +242,12 @@ class QwenMisalignmentRunner:
             logger.info(f"Running scenario: {scenario}")
             logger.info(f"{'='*50}\n")
             
-            summary = self.run_scenario(scenario)
+            # Pass through the config values explicitly
+            summary = self.run_scenario(
+                scenario,
+                max_attempts=self.config.max_attempts,
+                early_stop=self.config.early_stop_threshold
+            )
             summaries[scenario] = summary
             
             # Save progress
